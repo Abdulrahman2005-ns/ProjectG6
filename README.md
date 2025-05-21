@@ -1,0 +1,101 @@
+#!/bin/bash
+
+# System Health Dashboard
+# Group 6
+
+# Log file
+LOG_FILE="health_$(date +%Y-%m-%d_%H-%M-%S).log"
+
+log() {
+    echo "$1" | tee -a "$LOG_FILE"
+}
+
+# CPU Health Check
+get_cpu_health() {
+    CPU_IDLE=$(top -bn1 | grep "Cpu(s)" | awk '{print $8}')
+    CPU_USAGE=$(echo "100 - $CPU_IDLE" | bc)
+
+    if (( $(echo "$CPU_USAGE < 50" | bc -l) )); then
+        STATUS="Healthy"
+    elif (( $(echo "$CPU_USAGE < 80" | bc -l) )); then
+        STATUS="Moderate Load"
+    else
+        STATUS="High Load"
+    fi
+
+    log "CPU Usage: ${CPU_USAGE}% -> $STATUS"
+}
+
+# RAM Health Check
+get_ram_health() {
+    MEM=$(free | awk '/^Mem:/ {print $3, $2}')
+    USED=$(echo "$MEM" | awk '{print $1}')
+    TOTAL=$(echo "$MEM" | awk '{print $2}')
+    PERCENT=$(echo "$USED*100/$TOTAL" | bc)
+
+    if (( PERCENT < 70 )); then
+        STATUS="Healthy"
+    elif (( PERCENT < 90 )); then
+        STATUS="Moderate Usage"
+    else
+        STATUS="High Memory Usage"
+    fi
+
+    log "Memory Usage: ${PERCENT}% -> $STATUS"
+}
+
+# Disk Health Check
+get_disk_health() {
+    PERCENT=$(df / | awk 'NR==2 {print $5}' | tr -d '%')
+
+    if (( PERCENT < 70 )); then
+        STATUS="Plenty of Space"
+    elif (( PERCENT < 90 )); then
+        STATUS="Getting Full"
+    else
+        STATUS="Low Disk Space"
+    fi
+
+    USAGE_LINE=$(df -h / | awk 'NR==2 {print $3 " used out of " $2}')
+    log "Disk Usage: $USAGE_LINE (${PERCENT}%) -> $STATUS"
+}
+
+# CPU Temperature Check 
+get_temperature() {
+    TEMP_RAW=$(sensors | grep -m 1 -E 'Core 0|Package id 0' | grep -oP '\+?\d+(\.\d+)?(?=°C)')
+    
+    if [ -z "$TEMP_RAW" ]; then
+        log "CPU Temperature: Not available (you may need to install lm-sensors)"
+        return
+    fi
+
+    TEMP=$(echo $TEMP_RAW | cut -d. -f1)
+
+    if (( TEMP < 60 )); then
+        STATUS="Cool"
+    elif (( TEMP < 80 )); then
+        STATUS="Warm"
+    else
+        STATUS="Hot - Consider cooling"
+    fi
+
+    log "CPU Temperature: ${TEMP}°C -> $STATUS"
+}
+
+# Main Dashboard
+clear
+log "==========================================="
+log "     SYSTEM HEALTH DASHBOARD   "
+log "==========================================="
+echo ""
+
+get_cpu_health
+echo ""
+get_ram_health
+echo ""
+get_disk_health
+echo ""
+get_temperature
+
+echo ""
+log "Report saved to: $LOG_FILE"
